@@ -125,8 +125,8 @@ void		jq_get_exception(void);
 /*
  * get table infomations for importForeignSchema
  */
-static List *jq_get_column_infos(JDBCUtilsInfo * jdbcUtilsInfo, char *tablename);
-static List *jq_get_table_names(JDBCUtilsInfo * jdbcUtilsInfo);
+static List *jq_get_column_infos(JDBCUtilsInfo * jdbcUtilsInfo, char *schemaname, char *tablename);
+static List *jq_get_table_names(JDBCUtilsInfo * jdbcUtilsInfo, char *schemaname);
 
 
 static void jq_get_JDBCUtils(JDBCUtilsInfo * jdbcUtilsInfo, jclass * JDBCUtilsClass, jobject * JDBCUtilsObject);
@@ -1487,10 +1487,11 @@ jq_get_exception()
 }
 
 static List *
-jq_get_column_infos(JDBCUtilsInfo * jdbcUtilsInfo, char *tablename)
+jq_get_column_infos(JDBCUtilsInfo * jdbcUtilsInfo, char *schemaname, char *tablename)
 {
 	jobject		JDBCUtilsObject;
 	jclass		JDBCUtilsClass;
+	jstring		jschemaname = (*Jenv)->NewStringUTF(Jenv, schemaname);
 	jstring		jtablename = (*Jenv)->NewStringUTF(Jenv, tablename);
 	int			i;
 
@@ -1528,19 +1529,21 @@ jq_get_column_infos(JDBCUtilsInfo * jdbcUtilsInfo, char *tablename)
 	PG_END_TRY();
 
 	/* getColumnNames */
-	idGetColumnNames = (*Jenv)->GetMethodID(Jenv, JDBCUtilsClass, "getColumnNames", "(Ljava/lang/String;)[Ljava/lang/String;");
+	idGetColumnNames = (*Jenv)->GetMethodID(Jenv, JDBCUtilsClass, "getColumnNames", "(Ljava/lang/String;Ljava/lang/String;)[Ljava/lang/String;");
 	if (idGetColumnNames == NULL)
 	{
+		(*Jenv)->DeleteLocalRef(Jenv, jschemaname);
 		(*Jenv)->DeleteLocalRef(Jenv, jtablename);
 		ereport(ERROR, (errmsg("Failed to find the JDBCUtils.getColumnNames method")));
 	}
 	jq_exception_clear();
-	columnNamesArray = (*Jenv)->CallObjectMethod(Jenv, JDBCUtilsObject, idGetColumnNames, jtablename);
+	columnNamesArray = (*Jenv)->CallObjectMethod(Jenv, JDBCUtilsObject, idGetColumnNames, jschemaname, jtablename);
 	jq_get_exception();
 	/* getColumnTypes */
-	idGetColumnTypes = (*Jenv)->GetMethodID(Jenv, JDBCUtilsClass, "getColumnTypes", "(Ljava/lang/String;)[Ljava/lang/String;");
+	idGetColumnTypes = (*Jenv)->GetMethodID(Jenv, JDBCUtilsClass, "getColumnTypes", "(Ljava/lang/String;Ljava/lang/String;)[Ljava/lang/String;");
 	if (idGetColumnTypes == NULL)
 	{
+		(*Jenv)->DeleteLocalRef(Jenv, jschemaname);
 		(*Jenv)->DeleteLocalRef(Jenv, jtablename);
 		if (columnNamesArray != NULL)
 		{
@@ -1549,12 +1552,13 @@ jq_get_column_infos(JDBCUtilsInfo * jdbcUtilsInfo, char *tablename)
 		ereport(ERROR, (errmsg("Failed to find the JDBCUtils.getColumnTypes method")));
 	}
 	jq_exception_clear();
-	columnTypesArray = (*Jenv)->CallObjectMethod(Jenv, JDBCUtilsObject, idGetColumnTypes, jtablename);
+	columnTypesArray = (*Jenv)->CallObjectMethod(Jenv, JDBCUtilsObject, idGetColumnTypes, jschemaname, jtablename);
 	jq_get_exception();
 	/* getPrimaryKey */
-	idGetPrimaryKey = (*Jenv)->GetMethodID(Jenv, JDBCUtilsClass, "getPrimaryKey", "(Ljava/lang/String;)[Ljava/lang/String;");
+	idGetPrimaryKey = (*Jenv)->GetMethodID(Jenv, JDBCUtilsClass, "getPrimaryKey", "(Ljava/lang/String;Ljava/lang/String;)[Ljava/lang/String;");
 	if (idGetPrimaryKey == NULL)
 	{
+		(*Jenv)->DeleteLocalRef(Jenv, jschemaname);
 		(*Jenv)->DeleteLocalRef(Jenv, jtablename);
 		if (columnNamesArray != NULL)
 		{
@@ -1564,10 +1568,10 @@ jq_get_column_infos(JDBCUtilsInfo * jdbcUtilsInfo, char *tablename)
 		{
 			(*Jenv)->DeleteLocalRef(Jenv, columnTypesArray);
 		}
-		ereport(ERROR, (errmsg("Failed to find the JDBCUtils.getColumnTypes method")));
+		ereport(ERROR, (errmsg("Failed to find the JDBCUtils.getPrimaryKey method")));
 	}
 	jq_exception_clear();
-	primaryKeyArray = (*Jenv)->CallObjectMethod(Jenv, JDBCUtilsObject, idGetPrimaryKey, jtablename);
+	primaryKeyArray = (*Jenv)->CallObjectMethod(Jenv, JDBCUtilsObject, idGetPrimaryKey, jschemaname, jtablename);
 	jq_get_exception();
 	if (primaryKeyArray != NULL)
 	{
@@ -1588,6 +1592,7 @@ jq_get_column_infos(JDBCUtilsInfo * jdbcUtilsInfo, char *tablename)
 
 		if (numberOfNames != numberOfTypes)
 		{
+			(*Jenv)->DeleteLocalRef(Jenv, jschemaname);
 			(*Jenv)->DeleteLocalRef(Jenv, jtablename);
 			(*Jenv)->DeleteLocalRef(Jenv, columnTypesArray);
 			(*Jenv)->DeleteLocalRef(Jenv, columnNamesArray);
@@ -1627,6 +1632,7 @@ jq_get_column_infos(JDBCUtilsInfo * jdbcUtilsInfo, char *tablename)
 	{
 		(*Jenv)->DeleteLocalRef(Jenv, columnTypesArray);
 	}
+	(*Jenv)->DeleteLocalRef(Jenv, jschemaname);
 	(*Jenv)->DeleteLocalRef(Jenv, jtablename);
 
 	return columnInfoList;
@@ -1660,7 +1666,7 @@ jq_get_column_infos_without_key(JDBCUtilsInfo * jdbcUtilsInfo, int *resultSetID,
 	/* getColumnNumber */
 	jmethodID	idNumberOfColumns;
 	jint		jresultSetID = *resultSetID;
-	int			numberOfColumns;
+	int		numberOfColumns;
 
 	/* for generating columnInfo List */
 	List	   *columnInfoList = NIL;
@@ -1755,11 +1761,12 @@ jq_get_column_infos_without_key(JDBCUtilsInfo * jdbcUtilsInfo, int *resultSetID,
  * jq_get_table_names
  */
 static List *
-jq_get_table_names(JDBCUtilsInfo * jdbcUtilsInfo)
+jq_get_table_names(JDBCUtilsInfo * jdbcUtilsInfo, char *schemaname)
 {
 	jobject		JDBCUtilsObject;
 	jclass		JDBCUtilsClass;
 	jmethodID	idGetTableNames;
+	jstring		jschemaname = (*Jenv)->NewStringUTF(Jenv, schemaname);
 	jobjectArray tableNameArray;
 	List	   *tableName = NIL;
 	jsize		numberOfTables;
@@ -1767,13 +1774,13 @@ jq_get_table_names(JDBCUtilsInfo * jdbcUtilsInfo)
 
 	jq_get_JDBCUtils(jdbcUtilsInfo, &JDBCUtilsClass, &JDBCUtilsObject);
 
-	idGetTableNames = (*Jenv)->GetMethodID(Jenv, JDBCUtilsClass, "getTableNames", "()[Ljava/lang/String;");
+	idGetTableNames = (*Jenv)->GetMethodID(Jenv, JDBCUtilsClass, "getTableNames", "(Ljava/lang/String;)[Ljava/lang/String;");
 	if (idGetTableNames == NULL)
 	{
 		ereport(ERROR, (errmsg("Failed to find the JDBCUtils.getTableNames method")));
 	}
 	jq_exception_clear();
-	tableNameArray = (*Jenv)->CallObjectMethod(Jenv, JDBCUtilsObject, idGetTableNames);
+	tableNameArray = (*Jenv)->CallObjectMethod(Jenv, JDBCUtilsObject, idGetTableNames, jschemaname);
 	jq_get_exception();
 	if (tableNameArray != NULL)
 	{
@@ -1793,14 +1800,15 @@ jq_get_table_names(JDBCUtilsInfo * jdbcUtilsInfo)
  * jq_get_schema_info
  */
 List *
-jq_get_schema_info(JDBCUtilsInfo * jdbcUtilsInfo)
+jq_get_schema_info(JDBCUtilsInfo * jdbcUtilsInfo,  char *schemaname)
 {
 	List	   *schema_list = NIL;
+	/* jstring    jschemaname = (*Jenv)->NewStringUTF(Jenv, schemaname); */
 	List	   *tableName = NIL;
 	JtableInfo *tableInfo;
 	ListCell   *lc;
 
-	tableName = jq_get_table_names(jdbcUtilsInfo);
+	tableName = jq_get_table_names(jdbcUtilsInfo, schemaname);
 
 	foreach(lc, tableName)
 	{
@@ -1811,7 +1819,7 @@ jq_get_schema_info(JDBCUtilsInfo * jdbcUtilsInfo)
 		if (tmpTableName != NULL)
 		{
 			tableInfo->table_name = tmpTableName;
-			tableInfo->column_info = jq_get_column_infos(jdbcUtilsInfo, tmpTableName);
+			tableInfo->column_info = jq_get_column_infos(jdbcUtilsInfo, schemaname, tmpTableName);
 			schema_list = lappend(schema_list, tableInfo);
 		}
 	}

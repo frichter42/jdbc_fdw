@@ -291,6 +291,8 @@ public class JDBCUtils {
           case Types.CHAR:
           case Types.LONGVARCHAR:
           case Types.VARCHAR:
+          case Types.CLOB:
+          case Types.NCLOB:
             tmpColumnTypesList[i] = "TEXT";
             break;
           case Types.DATE:
@@ -395,16 +397,17 @@ public class JDBCUtils {
    * getTableNames
    *      Returns the column name
    */
-  public String[] getTableNames() throws SQLException {
+  public String[] getTableNames(String tableSchema) throws SQLException {
     try {
       checkConnExist();
       DatabaseMetaData md = conn.getConnection().getMetaData();
-      ResultSet tmpResultSet = md.getTables(null, null, "%", null);
+      ResultSet tmpResultSet = md.getTables(null, tableSchema, "%", null);
 
       List<String> tmpTableNamesList = new ArrayList<String>();
       while (tmpResultSet.next()) {
         tmpTableNamesList.add(tmpResultSet.getString(3));
       }
+      tmpResultSet.close();
       String[] tmpTableNames = new String[tmpTableNamesList.size()];
       for (int i = 0; i < tmpTableNamesList.size(); i++) {
         tmpTableNames[i] = tmpTableNamesList.get(i);
@@ -419,15 +422,16 @@ public class JDBCUtils {
    * getColumnNames
    *      Returns the column name
    */
-  public String[] getColumnNames(String tableName) throws SQLException {
+  public String[] getColumnNames(String tableSchema, String tableName) throws SQLException {
     try {
       checkConnExist();
       DatabaseMetaData md = conn.getConnection().getMetaData();
-      ResultSet tmpResultSet = md.getColumns(null, null, tableName, null);
+      ResultSet tmpResultSet = md.getColumns(null, tableSchema, tableName, null);
       List<String> tmpColumnNamesList = new ArrayList<String>();
       while (tmpResultSet.next()) {
         tmpColumnNamesList.add(tmpResultSet.getString("COLUMN_NAME"));
       }
+      tmpResultSet.close();
       String[] tmpColumnNames = new String[tmpColumnNamesList.size()];
       for (int i = 0; i < tmpColumnNamesList.size(); i++) {
         tmpColumnNames[i] = tmpColumnNamesList.get(i);
@@ -442,15 +446,16 @@ public class JDBCUtils {
    * getColumnTypes
    *      Returns the column name
    */
-  public String[] getColumnTypes(String tableName) throws SQLException {
+  public String[] getColumnTypes(String tableSchema, String tableName) throws SQLException {
     try {
       checkConnExist();
       DatabaseMetaData md = conn.getConnection().getMetaData();
-      ResultSet tmpResultSet = md.getColumns(null, null, tableName, null);
+      ResultSet tmpResultSet = md.getColumns(null, tableSchema, tableName, null);
       List<String> tmpColumnTypesList = new ArrayList<String>();
       while (tmpResultSet.next()) {
         tmpColumnTypesList.add(tmpResultSet.getString("TYPE_NAME"));
       }
+      tmpResultSet.close();
       String[] tmpColumnTypes = new String[tmpColumnTypesList.size()];
       for (int i = 0; i < tmpColumnTypesList.size(); i++) {
         switch (tmpColumnTypesList.get(i)) {
@@ -462,7 +467,11 @@ public class JDBCUtils {
             tmpColumnTypes[i] = "BIGINT";
             break;
           case "CHAR":
-            tmpColumnTypes[i] = "CHAR (1)";
+          case "NVARCHAR":
+          case "DATALINK":
+	  case "CHAR () FOR BIT DATA":
+            // tmpColumnTypes[i] = "CHAR (1)";
+            tmpColumnTypes[i] = "VARCHAR";
             break;
           case "STRING":
             tmpColumnTypes[i] = "TEXT";
@@ -474,7 +483,14 @@ public class JDBCUtils {
             tmpColumnTypes[i] = "FLOAT8";
             break;
           case "BLOB":
+          case "BINARY":
+          case "VARBINARY":
+          case "LONGVARBINARY":
             tmpColumnTypes[i] = "BYTEA";
+            break;
+          case "CLOB":
+          case "NCLOB":
+            tmpColumnTypes[i] = "TEXT";
             break;
           case "BOOL_ARRAY":
             tmpColumnTypes[i] = "BOOL[]";
@@ -515,11 +531,11 @@ public class JDBCUtils {
    * getPrimaryKey
    *      Returns the column name
    */
-  public String[] getPrimaryKey(String tableName) throws SQLException {
+  public String[] getPrimaryKey(String tableSchema, String tableName) throws SQLException {
     try {
       checkConnExist();
       DatabaseMetaData md = conn.getConnection().getMetaData();
-      ResultSet tmpResultSet = md.getPrimaryKeys(null, null, tableName);
+      ResultSet tmpResultSet = md.getPrimaryKeys(null, tableSchema, tableName);
       List<String> tmpPrimaryKeyList = new ArrayList<String>();
       while (tmpResultSet.next()) {
         tmpPrimaryKeyList.add(tmpResultSet.getString("COLUMN_NAME"));

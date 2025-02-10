@@ -3123,7 +3123,7 @@ jdbcImportForeignSchema(ImportForeignSchemaStmt *stmt, Oid serverOid)
 	user = GetUserMapping(GetUserId(), server->serverid);
 	jdbcUtilsInfo = jdbc_get_jdbc_utils_obj(server, user, false);
 
-	schema_list = jq_get_schema_info(jdbcUtilsInfo);
+	schema_list = jq_get_schema_info(jdbcUtilsInfo, stmt->remote_schema);
 	if (schema_list != NIL)
 	{
 		initStringInfo(&buf);
@@ -3138,11 +3138,13 @@ jdbcImportForeignSchema(ImportForeignSchemaStmt *stmt, Oid serverOid)
 				appendStringInfo(&buf, "DROP FOREIGN TABLE IF EXISTS %s", tmpTableInfo->table_name);
 				commands_drop = lappend(commands_drop, pstrdup(buf.data));
 				resetStringInfo(&buf);
-				appendStringInfo(&buf, "CREATE FOREIGN TABLE %s(", tmpTableInfo->table_name);
+				appendStringInfo(&buf, "CREATE FOREIGN TABLE %s.", stmt->local_schema);
+				appendStringInfo(&buf, "%s(", tmpTableInfo->table_name);
 			}
 			else
 			{
-				appendStringInfo(&buf, "CREATE FOREIGN TABLE IF NOT EXISTS %s(", tmpTableInfo->table_name);
+				appendStringInfo(&buf, "CREATE FOREIGN TABLE IF NOT EXISTS %s.", stmt->local_schema);
+				appendStringInfo(&buf, "%s(", tmpTableInfo->table_name);
 			}
 			first_column = true;
 			foreach(column_lc, tmpTableInfo->column_info)
@@ -3171,7 +3173,9 @@ jdbcImportForeignSchema(ImportForeignSchemaStmt *stmt, Oid serverOid)
 				if (columnInfo->primary_key)
 					appendStringInfoString(&buf, " OPTIONS (key 'true')");
 			}
-			appendStringInfo(&buf, ") SERVER %s;", quote_identifier(server->servername));
+			appendStringInfo(&buf, ") SERVER %s", quote_identifier(server->servername));
+			appendStringInfo(&buf, " OPTIONS(table_name '%s'", tmpTableInfo->table_name);
+			appendStringInfo(&buf, ", schema_name '%s');", stmt->remote_schema);
 			commands = lappend(commands, pstrdup(buf.data));
 	NEXT_COLUMN:
 			resetStringInfo(&buf);

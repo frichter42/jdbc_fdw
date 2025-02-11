@@ -232,7 +232,7 @@ public class JDBCUtils {
               break;
             default:
               /* Convert all columns to String */
-              tmpArrayOfResultRow[i] = tmpResultSet.getString(i + 1);
+              tmpArrayOfResultRow[i] = tmpResultSet.getString(i + 1).replaceAll("\\s+$", "");
           }
         }
         /* The current row in resultSet is returned

@@ -230,9 +230,18 @@ public class JDBCUtils {
                 tmpArrayOfResultRow[i] = null;
               }
               break;
+            case Types.CHAR:
+            case Types.NCHAR:
+              String tmpString = tmpResultSet.getString(i + 1);
+              if (tmpString != null) {
+                 tmpArrayOfResultRow[i] = tmpString.replaceAll("\\s+$", "");
+              } else {
+                 tmpArrayOfResultRow[i] = tmpString;
+              }
+              break;
             default:
               /* Convert all columns to String */
-              tmpArrayOfResultRow[i] = tmpResultSet.getString(i + 1).replaceAll("\\s+$", "");
+              tmpArrayOfResultRow[i] = tmpResultSet.getString(i + 1);
           }
         }
         /* The current row in resultSet is returned
@@ -245,6 +254,7 @@ public class JDBCUtils {
          * All of resultSet's rows have been returned to the C code.
          * Close tmpResultSet's statement
          */
+        tmpResultSet.close();
         tmpResultSet.getStatement().close();
         clearResultSetID(resultSetID);
         return null;
@@ -469,7 +479,7 @@ public class JDBCUtils {
           case "CHAR":
           case "NVARCHAR":
           case "DATALINK":
-	  case "CHAR () FOR BIT DATA":
+          case "CHAR () FOR BIT DATA":
             // tmpColumnTypes[i] = "CHAR (1)";
             tmpColumnTypes[i] = "VARCHAR";
             break;
